@@ -9,11 +9,20 @@ from botocore.config import Config
 from pathlib import Path
 import subprocess
 import shutil
+from app.platform_utils import resolve_godot_executable, resolve_wechat_cli
 
 
 class Exporter:
     def __init__(self) -> None:
         self.storage: Storge = Storge()
+
+    @staticmethod
+    def _engine_pack_path(export_path: str) -> str:
+        return os.path.join(export_path, "engine", "godot.zip")
+
+    @staticmethod
+    def _subpack_path(export_path: str, pack_name: str) -> str:
+        return os.path.join(export_path, "subpacks", f"{pack_name}.zip")
 
     def get_tempalte_json(self):
         with open("./templates/template.json", "rb") as f:
@@ -32,9 +41,7 @@ class Exporter:
         return export_settings
 
     def export_project(self, export_settings: dict, project: dict):
-        exported = os.path.exists(
-            os.path.join(export_settings["export_path"], "game.json")
-        )
+        exported = self._has_base_template(export_settings["export_path"])
         self.save_export_settings(export_settings, project["path"])
         settings = self.storage.get("settings.json")
 
@@ -53,9 +60,7 @@ class Exporter:
                     export_settings["export_perset"],
                     config_index=None,
                 )
-                pckPath = os.path.join(
-                    export_settings["export_path"], "engine\\godot.zip"
-                )
+                pckPath = self._engine_pack_path(export_settings["export_path"])
                 self.export_pck(project["path"], export_settings, pckPath)
         else:
             with zipfile.ZipFile(
@@ -63,9 +68,12 @@ class Exporter:
             ) as zf:
                 zf.extractall(export_settings["export_path"])
 
-            pckPath = os.path.join(export_settings["export_path"], "engine\\godot.zip")
-            self.replace_gamejson(export_settings)
-            self.replace_privatejson(project, export_settings)
+        self.replace_gamejson(export_settings)
+        self.replace_privatejson(project, export_settings)
+        self.replace_projectconfig(project, export_settings)
+
+        if not (exported and settings):
+            pckPath = self._engine_pack_path(export_settings["export_path"])
             if export_settings["subpack_config"]:
                 self.export_subpack(
                     export_settings["subpack_config"],
@@ -80,40 +88,64 @@ class Exporter:
                     export_settings["export_perset"],
                     config_index=None,
                 )
-                pckPath = os.path.join(
-                    export_settings["export_path"], "engine\\godot.zip"
-                )
+                pckPath = self._engine_pack_path(export_settings["export_path"])
                 self.export_pck(project["path"], export_settings, pckPath)
 
     def replace_gamejson(self, export_settings: dict):
         path = os.path.join(export_settings["export_path"], "game.json")
-        with open(path, "rb") as f:
-            gamejson = json.loads(f.read())
-            gamejson["deviceOrientation"] = export_settings["device_orientation"]
-        with open(path, "w+") as f:
+        gamejson = {}
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                gamejson = json.loads(f.read())
+        gamejson["deviceOrientation"] = export_settings["device_orientation"]
+        with open(path, "w+", encoding="utf-8") as f:
             f.write(json.dumps(gamejson, indent=2))
 
     def replace_privatejson(self, project: dict, export_settings: dict):
         path = os.path.join(
             export_settings["export_path"], "project.private.config.json"
         )
-        with open(path, "rb") as f:
-            privatejson = json.loads(f.read())
-            privatejson["projectname"] = project.get("name", "")
-            privatejson["description"] = project.get("description", "")
-            privatejson["appid"] = export_settings.get("appid", "")
-        with open(path, "w+") as f:
+        privatejson = {}
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                privatejson = json.loads(f.read())
+        privatejson["projectname"] = project.get("name", "")
+        privatejson["description"] = project.get("description", "")
+        privatejson["appid"] = export_settings.get("appid", "")
+        with open(path, "w+", encoding="utf-8") as f:
             f.write(json.dumps(privatejson, indent=2))
+
+    def replace_projectconfig(self, project: dict, export_settings: dict):
+        path = os.path.join(export_settings["export_path"], "project.config.json")
+        project_config = {}
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                project_config = json.loads(f.read())
+
+        project_config["compileType"] = "game"
+        project_config["projectname"] = project.get("name", "")
+        project_config["appid"] = export_settings.get("appid", "")
+        project_config["libVersion"] = project_config.get("libVersion", "latest")
+        project_config["setting"] = project_config.get("setting", {"urlCheck": False})
+        project_config["condition"] = project_config.get("condition", {})
+
+        with open(path, "w+", encoding="utf-8") as f:
+            f.write(json.dumps(project_config, indent=2))
 
     def save_export_settings(self, export_settings: dict, project_path: str):
         projectpath = Path(project_path)
         with open(projectpath.joinpath("minigame.export.json"), "w+") as f:
             f.write(json.dumps(export_settings, indent=2))
 
+    def _has_base_template(self, export_path: str) -> bool:
+        game_json = os.path.join(export_path, "game.json")
+        project_config = os.path.join(export_path, "project.config.json")
+        return os.path.exists(game_json) and os.path.exists(project_config)
+
     def export_pck(self, project_path: str, export_settings: dict, packPath: str):
         settings = self.storage.get("settings.json")
         if settings:
-            godot_execute = settings["godot_execute"]
+            godot_execute = resolve_godot_executable(settings["godot_execute"])
             result = subprocess.run(
                 [
                     godot_execute,
@@ -131,8 +163,16 @@ class Exporter:
         export_path = export_settings["export_path"]
         settings = self.storage.get("settings.json")
         if settings:
-            wechat_execute = os.path.join(settings["wechat_execute"], "cli.bat")
-            result = subprocess.run([wechat_execute, "open", "--project", export_path])
+            wechat_execute = resolve_wechat_cli(settings["wechat_execute"])
+            # Clear possible stale project cache in WeChat DevTools, then reopen.
+            subprocess.run(
+                [wechat_execute, "close", "--project", export_path],
+                capture_output=True,
+                text=True,
+            )
+            result = subprocess.run(
+                [wechat_execute, "open-other", "--project", export_path]
+            )
             print(result)
 
     def export_subpack(
@@ -153,13 +193,11 @@ class Exporter:
                     godot_execute, project_path, export_settings["export_perset"], i
                 )
                 if pack["subpack_type"] == "main":
-                    pckPath = os.path.join(
-                        export_settings["export_path"], "engine\\godot.zip"
-                    )
+                    pckPath = self._engine_pack_path(export_settings["export_path"])
                     self.export_pck(project_path, export_settings, pckPath)
                 if pack["subpack_type"] == "inner_subpack":
-                    pckPath = os.path.join(
-                        export_settings["export_path"], f"subpacks\\{pack['name']}.zip"
+                    pckPath = self._subpack_path(
+                        export_settings["export_path"], pack["name"]
                     )
                     self.export_pck(project_path, export_settings, pckPath)
 

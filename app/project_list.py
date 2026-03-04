@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List
 from nicegui import ui, app, run
-from app.utils import parse_godot_project
+from app.utils import parse_godot_project, resolve_project_icon
 from app.stroge import Storge
-from PIL import Image
 import webview
 import uuid
 import os
@@ -37,11 +36,9 @@ def project_card():
     with ui.grid(columns=3).classes("w-full p-4"):
         for i, project in enumerate(project_manager.projects):
             if project["name"].startswith(project_manager.search):
-                icon = (
-                    Image.open(project["icon"])
-                    if not project["icon"].endswith(".svg")
-                    else "/assets/logo.svg"
-                )
+                icon = project.get("icon", "/assets/logo.svg")
+                if icon != "/assets/logo.svg" and not os.path.exists(icon):
+                    icon = "/assets/logo.svg"
                 with ui.card().tight():
                     with ui.image(icon):
                         with ui.column().classes("w-full absolute-bottom"):
@@ -90,14 +87,8 @@ def project_list():
             "path": folder,
             "version": application.get("config/version", ""),
             "description": application.get("config/description", ""),
-            "icon": (
-                application.get("config/icon", "").split("//")[-1]
-                if application.get("config/icon", "")
-                else "icon.svg"
-            ),
+            "icon": resolve_project_icon(folder, application.get("config/icon", "")),
         }
-        icon_path = os.path.join(folder, project["icon"])
-        project["icon"] = icon_path
         await project_manager.add(project)
 
     with ui.column(align_items="start").classes("w-full h-full p2"):

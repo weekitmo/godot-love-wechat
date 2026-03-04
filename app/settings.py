@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from nicegui import ui, app, run
 from app.stroge import Storge
+from app.platform_utils import godot_file_types, is_windows
 import webview
 
 
@@ -41,13 +42,15 @@ def settings():
         ui.notify("保存成功！")
 
     async def choose_godot():
-        file_types = ("Godot Execute (*.exe)",)
+        file_types = godot_file_types()
         file = await app.native.main_window.create_file_dialog(dialog_type=webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)  # type: ignore
         if file:
             setting_item.godot_execute = file[0]
 
     async def choose_wechat():
-        file = await app.native.main_window.create_file_dialog(dialog_type=webview.FOLDER_DIALOG, allow_multiple=False, file_types=())  # type: ignore
+        dialog_type = webview.FOLDER_DIALOG if is_windows() else webview.OPEN_DIALOG
+        file_types = () if is_windows() else ("Wechat DevTools (*.app)", "Executable (*)")
+        file = await app.native.main_window.create_file_dialog(dialog_type=dialog_type, allow_multiple=False, file_types=file_types)  # type: ignore
         if file:
             setting_item.wechat_execute = file[0]
 

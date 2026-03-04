@@ -12,8 +12,11 @@ func _init() -> void:
 
 	for section in config.get_sections():
 		if section.begins_with("preset."):  # 找到所有 preset.x
+			var platform = config.get_value(section, "platform", "")
 			var name = config.get_value(section, "name", "")
-			if name != "":
+			# This tool exports to WeChat minigame (web runtime),
+			# so only Web presets are valid.
+			if name != "" and platform == "Web":
 				preset_names.append(name)
 	print(JSON.stringify(preset_names))
 	quit()

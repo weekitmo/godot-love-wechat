@@ -13,8 +13,12 @@ func _init() -> void:
 		for section in config.get_sections():
 			if section.begins_with("preset."):  # 找到所有 preset.x
 				var _name = config.get_value(section, "name", "")
-				if name == _name:
+				var platform = config.get_value(section, "platform", "")
+				if name == _name and platform == "Web":
 					config.set_value(section, "export_filter", "all_resources")
+					# Use text script export mode for better runtime compatibility
+					# between engine minor versions (e.g. 4.6 project -> 4.4 runtime).
+					config.set_value(section, "script_export_mode", 0)
 					if config.get_value(section, "export_files", ""):
 						config.erase_section_key(section, "export_files")
 					config.save("res://export_presets.cfg")
@@ -28,12 +32,14 @@ func _init() -> void:
 		for section in config.get_sections():
 			if section.begins_with("preset."):  # 找到所有 preset.x
 				var _name = config.get_value(section, "name", "")
-				if name == _name:
+				var platform = config.get_value(section, "platform", "")
+				if name == _name and platform == "Web":
 					var subpack_config = subpack_configs[index]
 					var resources = PackedStringArray()
 					resources.append_array(subpack_config["subpack_resource"])
 					config.set_value(section, "export_filter", "resources")
 					config.set_value(section, "export_files", resources)
+					config.set_value(section, "script_export_mode", 0)
 					config.save("res://export_presets.cfg")
 					quit()
 					return

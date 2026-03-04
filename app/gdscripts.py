@@ -2,9 +2,11 @@ from pathlib import Path
 import subprocess
 import json
 import re
+from app.platform_utils import resolve_godot_executable
 
 
 def get_export_presets(godot_execute: str, project_path: str):
+    godot_execute = resolve_godot_executable(godot_execute)
     abs = Path().resolve().resolve()
     script_path = abs.joinpath("gdscripts/export_perset.gd")
 
@@ -33,6 +35,7 @@ def get_export_presets(godot_execute: str, project_path: str):
 def set_export_presets(
     godot_execute: str, project_path: str, preset: str, config_index: int | None
 ):
+    godot_execute = resolve_godot_executable(godot_execute)
     abs = Path().resolve().resolve()
     script_path = abs.joinpath("gdscripts/set_preset.gd")
     if config_index is None:

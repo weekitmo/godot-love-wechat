@@ -46,6 +46,34 @@ def read_icon_to_base64(icon_path):
     return img
 
 
+def resolve_project_icon(project_root: str, icon_value: str | None) -> str:
+    fallback = "/assets/logo.svg"
+    root = Path(project_root)
+
+    candidates: List[str] = []
+    if icon_value:
+        raw = icon_value.strip().strip('"')
+        if raw.startswith("res://"):
+            raw = raw.removeprefix("res://")
+        elif raw.startswith("uid://"):
+            raw = ""
+
+        raw = raw.lstrip("/\\")
+        if raw:
+            candidates.append(raw)
+
+    # Common defaults for Godot projects.
+    candidates.extend(["icon.svg", "icon.png", "icon.webp", "icon.jpg", "icon.jpeg"])
+
+    for candidate in candidates:
+        candidate_path = Path(candidate)
+        icon_path = candidate_path if candidate_path.is_absolute() else root.joinpath(candidate)
+        if icon_path.is_file():
+            return str(icon_path)
+
+    return fallback
+
+
 def build_tree_dict(
     root_path: Union[str, Path],
     excludes: List[str] = [".import", ".uid", ".escn", ".godot"],

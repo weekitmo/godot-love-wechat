@@ -31,7 +31,7 @@
 ## 支持系统
 
 - Windows 11 因为用了webview2的依赖
-- Macos (等待开发)
+- Macos
 
 ## 文件系统解决方案
 
