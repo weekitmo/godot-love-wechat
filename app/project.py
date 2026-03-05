@@ -239,6 +239,7 @@ subpack_type = {
 
 
 subpack_cfg = SubpackConfig()
+AUTO_INNER_SUBPACK_MAX_BYTES = 4 * 1024 * 1024
 
 
 @ui.refreshable
@@ -284,6 +285,32 @@ def subpack_config(project):
     file_tree = utils.build_tree_dict(project_path)
     modal = ui.dialog().classes("max-w-[800px]")
 
+    def split_resources_by_size(resources: List[str]) -> List[List[str]]:
+        groups: List[List[str]] = []
+        current_group: List[str] = []
+        current_size = 0
+
+        for resource in resources:
+            relative_path = resource.removeprefix("res://")
+            absolute_path = project_path.joinpath(relative_path)
+            size = absolute_path.stat().st_size if absolute_path.exists() else 0
+
+            if (
+                current_group
+                and current_size + size > AUTO_INNER_SUBPACK_MAX_BYTES
+            ):
+                groups.append(current_group)
+                current_group = []
+                current_size = 0
+
+            current_group.append(resource)
+            current_size += size
+
+        if current_group:
+            groups.append(current_group)
+
+        return groups
+
     def on_tick(e):
         subpack_cfg.subpack_resource = e.value
 
@@ -312,6 +339,51 @@ def subpack_config(project):
         subpack_cfg.clear()
         subpacks_ui.refresh()
         modal.close()
+
+    async def on_auto_subpack():
+        plan = await run.io_bound(utils.generate_auto_subpack_plan, project_path)
+        if not plan.main_resources:
+            ui.notify("自动分包失败：未识别到可导出资源", type="negative")
+            return
+
+        subpacks = [
+            {
+                "name": "main",
+                "subpack_type": "main",
+                "subpack_resource": plan.main_resources,
+                "cdn_path": "",
+            }
+        ]
+        if plan.inner_resources:
+            grouped_inner_resources = split_resources_by_size(plan.inner_resources)
+            for idx, group in enumerate(grouped_inner_resources):
+                pack_name = (
+                    "auto-inner"
+                    if len(grouped_inner_resources) == 1
+                    else f"auto-inner-{idx + 1}"
+                )
+                subpacks.append(
+                    {
+                        "name": pack_name,
+                        "subpack_type": "inner_subpack",
+                        "subpack_resource": group,
+                        "cdn_path": "",
+                    }
+                )
+        export_settings.subpack_config = subpacks
+        subpacks_ui.refresh()
+
+        stats = plan.stats
+        inner_pack_count = max(0, len(subpacks) - 1)
+        ui.notify(
+            f"自动分包完成：主包 {stats.get('main_count', 0)} 项，子包 {stats.get('inner_count', 0)} 项（共 {inner_pack_count} 个分包）",
+            type="positive",
+        )
+        if plan.warnings:
+            ui.notify(
+                f"自动分包提示：{plan.warnings[0]}",
+                type="warning",
+            )
 
     with modal, ui.card().style("width: 800px; max-width: None"):
         with ui.row(align_items="start").classes("w-full h-96"):
@@ -345,7 +417,9 @@ def subpack_config(project):
 
     with ui.row(align_items="center").classes("w-full border-b p-4 justify-between"):
         ui.label("分包配置")
-        ui.button("新增分包", on_click=modal.open)
+        with ui.row(align_items="center"):
+            ui.button("自动分包", on_click=on_auto_subpack).props("outline")
+            ui.button("新增分包", on_click=modal.open)
 
     subpacks_ui(modal, tree)  # pyright: ignore
 

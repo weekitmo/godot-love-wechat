@@ -120,6 +120,26 @@ func on_sync_error(error):
 分包管理有些复杂具体情况可以看视频讲解
 [https://www.bilibili.com/video/BV18rRhYmEvd](https://www.bilibili.com/video/BV18rRhYmEvd)
 
+#### 自动分包（通用策略）
+
+工具内“自动分包”按钮会按以下规则生成：
+
+1. 主包：最小主包策略，默认只保留 `project.godot`、`default_bus_layout.tres` 和 `autoload` 依赖闭包；
+2. 子包：其余资源自动归入 `auto-inner`，并按 4MB 自动拆分为 `auto-inner-1/2/...`；
+3. 兜底：如果无法识别 `run/main_scene`，会自动回退为“不拆分”（全部放主包），避免导出不可运行。
+
+> 注意：自动分包基于静态依赖分析。运行时字符串拼接路径、网络下载资源等动态加载场景无法 100% 推断，建议在关键场景自行验证。
+
+自动分包完成后，导出器会自动注入启动胶水层（无需手写 `["subpacks/xxx.zip"]`）：
+
+1. 将原 `run/main_scene` 改为一个临时启动场景；
+2. 启动场景通过 `godotSdk.downloadSubpcks` 下载并写入所有本地内分包；
+3. 若存在 CDN 分包，按清单调用 `godotSdk.downloadCDNSubpcks` 下载；
+4. 按清单逐个 `ProjectSettings.load_resource_pack(...)` 挂载；
+5. 最后跳转回原始主场景。
+
+支持多个内分包（例如 `auto-inner-1`, `auto-inner-2`, ...）。
+
 ## 常见问题
 
 1. 打开报错
