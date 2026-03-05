@@ -3,3 +3,5 @@ __pycache__/
 *$py.class
 dist/*
 build/*
+wechat.export.json
+mock-cdn-data

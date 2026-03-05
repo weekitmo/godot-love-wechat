@@ -1,14 +1,7 @@
-<div align="center">
-  <h1>Godot小游戏转换工具</h1>
-  <img src="./assets/logo.svg"></img>
-</div>
-<br/>
+# Godot小游戏转换工具
 
 # 项目声明
-本人已不研究微信小游戏了，也无力维护和更新本项目，大部分思路都在b站视频有介绍和模版源码也开源只是提供了思路。现在AI已经可以分析并移植更新版本，很多朋友用这个方法适配了新版本。项目就到此为止祝大家好运
-
-这是一个将Godot4.3 将WEB适配为微信小游戏的小工具，自行编译了Godot4.3的WASM，将ScriptProcessor的音频废案代码重新添加回来，使得在微信小游戏当中能够播放声音,并且受控于Godot的音频总线。
-并且增加了将wasm的内存文件系统的用户文件夹定时拷贝至微信小游戏的文件系统
+Fork [原仓库](https://github.com/yuchenyang1994/godot-love-wechat)
 
 裁剪或关闭了以下模块：
 
@@ -140,6 +133,76 @@ func on_sync_error(error):
 
 支持多个内分包（例如 `auto-inner-1`, `auto-inner-2`, ...）。
 
+#### 分包运行机制说明（为什么 Network 看不到 auto-inner.zip）
+
+这是微信小游戏分包机制本身的表现，不是没生效：
+
+1. 模板先调用 `wx.loadSubpackage({ name: "subpacks" })`，拉取的是整个 `subpacks` 子包；
+2. 子包代码里再用 `fs.readFile("subpacks/*.zip")` 读取 zip，并写入 Godot 的虚拟文件系统；
+3. Godot 启动胶水层执行 `ProjectSettings.load_resource_pack(...)` 挂载 zip；
+4. 挂载成功后再切回原始主场景。
+
+所以你通常会看到 `subpacks/game.js` 的加载，不一定会看到单独 `auto-inner.zip` 的网络请求。
+
+### CLI 导出（配置文件 + 命令）
+
+除了 GUI，也支持 CLI 批处理导出，适合自动化构建。
+
+1. 安装依赖：
+
+```bash
+uv sync
+```
+
+2. 生成配置模板：
+
+```bash
+uv run python -m app.cli init-config -o ./wechat.export.json
+```
+
+3. 编辑 `wechat.export.json`（只填必要字段：`project`、`settings`、`export`）；
+
+4. 执行导出：
+
+```bash
+uv run python -m app.cli export -c ./wechat.export.json
+```
+
+5. 导出后自动打开微信开发者工具（可选）：
+
+```bash
+uv run python -m app.cli export -c ./wechat.export.json --preview
+```
+
+CLI 固定为自动分包模式，会自动生成主包 + 子包（默认 4MB 切分，支持多包），无需手写 `subpack_config`。
+分包类型自动判定：CDN 配置完整则走 `cdn_subpack`，否则自动回退 `inner_subpack`。
+每个自动子包名会带短 hash（例如 `auto-inner-1-a1b2c3d4`）用于版本区分。
+
+### 本地模拟 CDN 分包（Node.js）
+
+如果你暂时没有真实 CDN，可以直接在仓库目录启动一个本地 mock CDN：
+
+```bash
+node ./tools/mock-cdn-server.mjs
+```
+
+默认监听 `http://127.0.0.1:39090`，文件落盘在 `./mock-cdn-data`。
+
+导出配置建议：
+
+1. `settings.cdn_endpoint = "http://127.0.0.1:39090"`
+2. `settings.cdn_access_key_id/cdn_secret_access_key` 可填任意占位值（本地 mock 不校验）
+3. `export.cdn_bucket = "test-bucket"`
+4. 无需配置 `pack_type`，CLI 会自动判定是否使用 CDN 分包
+
+导出时会把 zip 上传到：
+
+```txt
+http://127.0.0.1:39090/<cdn_bucket>/<cdn_path>/<pack_name>.zip
+```
+
+运行时会通过 `downloadCDNSubpcks(url)` 发起网络请求，你会在开发者工具 Network 里看到对应 URL。
+
 ## 常见问题
 
 1. 打开报错
@@ -178,7 +241,3 @@ func on_sync_error(error):
 6. 是否支持第三方插件？
 
    如果你的第三方插件是纯gds写的那肯定是支持的，如果你的插件是C++写的大概率不会支持，开启C++需要额外的wasm库进行动态链接，如果开启wasm动态链接需要支持多线程，小游戏平台是不能开启wasm多线程的！
-
-## 如果对你有帮助请我喝杯咖啡吧
-
-![wechatpay](./pictures/wechat_pay.jpg)

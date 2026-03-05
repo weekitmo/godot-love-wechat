@@ -12,6 +12,8 @@ from pathlib import Path
 import subprocess
 import shutil
 from app.platform_utils import resolve_godot_executable, resolve_wechat_cli
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
 
 
 class Exporter:
@@ -25,6 +27,62 @@ class Exporter:
     @staticmethod
     def _subpack_path(export_path: str, pack_name: str) -> str:
         return os.path.join(export_path, "subpacks", f"{pack_name}.zip")
+
+    @staticmethod
+    def _resolve_s3_addressing_style(endpoint_url: str) -> str:
+        endpoint = str(endpoint_url or "").strip()
+        if not endpoint:
+            return "virtual"
+        try:
+            parsed = urlparse(endpoint)
+            host = (parsed.hostname or "").lower()
+        except Exception:
+            host = ""
+        if host in {"127.0.0.1", "localhost", "::1"} or host.endswith(".localhost"):
+            return "path"
+        return "virtual"
+
+    @staticmethod
+    def _is_local_endpoint(endpoint_url: str) -> bool:
+        endpoint = str(endpoint_url or "").strip()
+        if not endpoint:
+            return False
+        try:
+            parsed = urlparse(endpoint)
+            host = (parsed.hostname or "").lower()
+        except Exception:
+            return False
+        return host in {"127.0.0.1", "localhost", "::1"} or host.endswith(".localhost")
+
+    @staticmethod
+    def _build_local_upload_url(endpoint_url: str, bucket: str, object_key: str) -> str:
+        endpoint = str(endpoint_url or "").rstrip("/")
+        bucket_path = quote(str(bucket).strip().strip("/"), safe="")
+        safe_key = "/".join(quote(part, safe="") for part in object_key.split("/"))
+        return f"{endpoint}/{bucket_path}/{safe_key}"
+
+    def _upload_to_local_endpoint(
+        self,
+        endpoint_url: str,
+        bucket: str,
+        object_key: str,
+        local_file_path: str,
+    ) -> None:
+        upload_url = self._build_local_upload_url(endpoint_url, bucket, object_key)
+        with open(local_file_path, "rb") as pck_file:
+            body = pck_file.read()
+        request = Request(
+            upload_url,
+            data=body,
+            method="PUT",
+            headers={"Content-Type": "application/zip"},
+        )
+        with urlopen(request, timeout=120) as response:
+            status_code = int(getattr(response, "status", 0) or response.getcode())
+            if status_code < 200 or status_code >= 300:
+                raise RuntimeError(
+                    f"mock CDN upload failed: status={status_code}, url={upload_url}"
+                )
 
     def get_tempalte_json(self):
         with open("./templates/template.json", "rb") as f:
@@ -249,16 +307,7 @@ if (typeof globalThis !== "undefined") {
                     self.export_pck(project_path, export_settings, pckPath)
 
                 if pack["subpack_type"] == "cdn_subpack":
-                    s3client = boto3.client(
-                        "s3",
-                        aws_access_key_id=settings["cdn_access_key_id"],
-                        aws_secret_access_key=settings["cdn_secret_access_key"],
-                        endpoint_url=settings["cdn_endpoint"],
-                        config=Config(
-                            s3={"addressing_style": "virtual"}, signature_version="v4"
-                        ),
-                    )
-
+                    endpoint_url = str(settings.get("cdn_endpoint", "") or "")
                     pckPath = os.path.join(tmpdir, f"{pack['name']}.zip")
                     self.export_pck(project_path, export_settings, pckPath)
                     remote_dir = self._normalize_remote_path(
@@ -269,9 +318,33 @@ if (typeof globalThis !== "undefined") {
                         if remote_dir
                         else f"{pack['name']}.zip"
                     )
-                    s3client.upload_file(
-                        pckPath, export_settings["cdn_bucket"], upload_path
-                    )
+
+                    if self._is_local_endpoint(endpoint_url):
+                        self._upload_to_local_endpoint(
+                            endpoint_url,
+                            export_settings["cdn_bucket"],
+                            upload_path,
+                            pckPath,
+                        )
+                    else:
+                        addressing_style = self._resolve_s3_addressing_style(endpoint_url)
+                        s3client = boto3.client(
+                            "s3",
+                            aws_access_key_id=settings["cdn_access_key_id"],
+                            aws_secret_access_key=settings["cdn_secret_access_key"],
+                            endpoint_url=endpoint_url,
+                            config=Config(
+                                s3={"addressing_style": addressing_style},
+                                signature_version="s3v4",
+                            ),
+                        )
+                        with open(pckPath, "rb") as pck_file:
+                            s3client.put_object(
+                                Bucket=export_settings["cdn_bucket"],
+                                Key=upload_path,
+                                Body=pck_file,
+                                ContentType="application/zip",
+                            )
 
             self._inject_subpack_bootstrap(
                 export_settings["export_path"],
