@@ -5,3 +5,4 @@ dist/*
 build/*
 wechat.export.json
 mock-cdn-data
+.DS_Store
