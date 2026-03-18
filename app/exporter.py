@@ -369,14 +369,16 @@ if (typeof globalThis !== "undefined") {
                 return cdn_path
             return f"{cdn_path.rstrip('/')}/{pack_name}"
 
-        endpoint = str(settings.get("cdn_endpoint", "") or "").rstrip("/")
+        runtime_endpoint = str(
+            settings.get("cdn_public_endpoint", "") or settings.get("cdn_endpoint", "")
+        ).rstrip("/")
         bucket = str(export_settings.get("cdn_bucket", "") or "").strip().strip("/")
-        if not endpoint or not bucket:
+        if not runtime_endpoint or not bucket:
             return ""
 
         remote_dir = self._normalize_remote_path(cdn_path)
         object_key = f"{remote_dir}/{pack_name}" if remote_dir else pack_name
-        return f"{endpoint}/{bucket}/{object_key}"
+        return f"{runtime_endpoint}/{bucket}/{object_key}"
 
     @staticmethod
     def _resolve_main_scene_path(project_path: str, scene_ref: str) -> str:

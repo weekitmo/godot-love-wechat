@@ -21,6 +21,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "godot_execute": "",
         "wechat_execute": "",
         "cdn_endpoint": "",
+        "cdn_public_endpoint": "",
         "cdn_access_key_id": "",
         "cdn_secret_access_key": "",
     },
@@ -283,6 +284,7 @@ def _save_settings(settings_cfg: Dict[str, Any]) -> Dict[str, Any]:
         "godot_execute": str(settings_cfg.get("godot_execute", "")).strip(),
         "wechat_execute": str(settings_cfg.get("wechat_execute", "")).strip(),
         "cdn_endpoint": str(settings_cfg.get("cdn_endpoint", "")).strip(),
+        "cdn_public_endpoint": str(settings_cfg.get("cdn_public_endpoint", "")).strip(),
         "cdn_access_key_id": str(settings_cfg.get("cdn_access_key_id", "")).strip(),
         "cdn_secret_access_key": str(settings_cfg.get("cdn_secret_access_key", "")).strip(),
     }

@@ -10,6 +10,7 @@ class SettingsItem:
     godot_execute: str
     wechat_execute: str
     cdn_endpoint: str = field(default="")
+    cdn_public_endpoint: str = field(default="")
     cdn_access_key_id: str = field(default="")
     cdn_secret_access_key: str = field(default="")
     cdn_session_token: str = field(default="")
@@ -23,9 +24,10 @@ def settings():
     if settings_data:
         setting_item.godot_execute = settings_data["godot_execute"]
         setting_item.wechat_execute = settings_data["wechat_execute"]
-        setting_item.cdn_endpoint = settings_data.get("cdn_endpoint")
-        setting_item.cdn_access_key_id = settings_data.get("cdn_access_key_id")
-        setting_item.cdn_secret_access_key = settings_data.get("cdn_secret_access_key")
+        setting_item.cdn_endpoint = settings_data.get("cdn_endpoint", "")
+        setting_item.cdn_public_endpoint = settings_data.get("cdn_public_endpoint", "")
+        setting_item.cdn_access_key_id = settings_data.get("cdn_access_key_id", "")
+        setting_item.cdn_secret_access_key = settings_data.get("cdn_secret_access_key", "")
 
     async def save_settings():
         await run.io_bound(
@@ -35,6 +37,7 @@ def settings():
                 "godot_execute": setting_item.godot_execute,
                 "wechat_execute": setting_item.wechat_execute,
                 "cdn_endpoint": setting_item.cdn_endpoint,
+                "cdn_public_endpoint": setting_item.cdn_public_endpoint,
                 "cdn_access_key_id": setting_item.cdn_access_key_id,
                 "cdn_secret_access_key": setting_item.cdn_secret_access_key,
             },
@@ -74,6 +77,12 @@ def settings():
             label="S3 EndPoint",
         ).classes("w-full") as i:
             i.bind_value(setting_item, "cdn_endpoint")
+
+        with ui.input(
+            placeholder="可选：仅用于运行时下载分包的公网/别名地址，留空默认使用 S3 EndPoint",
+            label="CDN Public EndPoint",
+        ).classes("w-full") as i:
+            i.bind_value(setting_item, "cdn_public_endpoint")
 
         with ui.input(
             placeholder="你的支持S3协议CDN Access Key ID", label="Access Key ID"

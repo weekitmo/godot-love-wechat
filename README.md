@@ -194,6 +194,7 @@ node ./tools/mock-cdn-server.mjs
 2. `settings.cdn_access_key_id/cdn_secret_access_key` 可填任意占位值（本地 mock 不校验）
 3. `export.cdn_bucket = "test-bucket"`
 4. 无需配置 `pack_type`，CLI 会自动判定是否使用 CDN 分包
+5. 如需“上传走内网地址、运行时走公网别名”，可额外设置 `settings.cdn_public_endpoint`（留空则默认使用 `settings.cdn_endpoint`）
 
 导出时会把 zip 上传到：
 
